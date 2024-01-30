@@ -1,10 +1,6 @@
 #include "linked-hash-table.h"
+#include <sys/cdefs.h>
 
-/*
- * alocates memory for an lht and initializes it.
- * returns a pointer to the generated lht or NULL if there was any error in the
- * process.
- */
 lht_t* lht_init(void) {
     lht_t* new = (lht_t*)malloc(sizeof(lht_t));
     int i;
@@ -31,10 +27,6 @@ lht_t* lht_init(void) {
     return new;
 }
 
-/*
- * frees the memory given to the lht.
- * every entry MUST be taken out before.
- */
 void lht_destroy(lht_t* self) {
     if (!self)
         return;
@@ -43,56 +35,39 @@ void lht_destroy(lht_t* self) {
     free(self);
 }
 
-/*
- * main, string-based, hash function.
- */
-size_t calculate_hash1(const char* str) {
-    unsigned long hash = 0;
-    int c;
-
-    while ((c = *str++))
-        hash = hash * 31 + c;
-
-    return hash % INIT_HASH;
+__always_inline size_t calculate_hash1(const lht_t* self, const void* key) {
+    return self->hash_func1(key) % INIT_HASH;
 }
 
-/*
- * alternative, string-based, hash function.
- * for collision rehashing.
- */
-size_t calculate_hash2(const char* str) {
-    unsigned long hash = 5381;
-    int c;
-
-    while ((c = *str++))
-        hash = ((hash << 5) + hash) + c;
-
-    return hash % INIT_HASH;
+__always_inline size_t calculate_hash2(const lht_t* self, const void* key) {
+    return self->hash_func2(key) % INIT_HASH;
 }
 
 /*
  * read:
  * https://www.scaler.com/topics/data-structures/double-hashing/
  */
-__always_inline size_t rehash(const char* str, const size_t prev, int round) {
-    return (prev + round * calculate_hash2(str)) % INIT_HASH;
+__always_inline size_t rehash(const lht_t* self, const void* key, const size_t prev, int round) {
+    return (prev + round * calculate_hash2(self, key)) % INIT_HASH;
 }
 
 /*
  * returns the index to the entry registered with the given key.
  * in case there isn't any correspondance, returns -1.
  */
-__always_inline ssize_t lht_get_index(lht_t* self, const char* key) {
+ssize_t lht_get_index(lht_t* self, const void* key) {
     size_t init, i;
     int round = 1;
-    init = i = calculate_hash1(key);
+
+    init = i = calculate_hash1(self, key);
     /* jumping collisions with multiple-hashing */
     while (self->raw[i]) {
-        /* found the key */
+        /* found the obj */
         if (!strcmp(self->raw[i]->key, key))
             return i;
+
         /* didn't find it, rehashing */
-        i = rehash(key, init, round);
+        i = rehash(self, key, init, round);
         round++;
     }
 
@@ -100,36 +75,24 @@ __always_inline ssize_t lht_get_index(lht_t* self, const char* key) {
     return -1;
 }
 
-/*
- * if there is a value associated with the given key,
- * it'll return a pointer to it.
- * else, it'll return NULL.
- */
-void* lht_get_entry(lht_t* self, const char* key) {
+__always_inline void* lht_get_entry(lht_t* self, const void* key) {
     ssize_t i = lht_get_index(self, key);
 
     return (i >= 0) ? self->raw[i]->value : NULL;
 }
 
-/*
- * insert a new entry into the lht.
- * key must have the same lifetime as the value (e.g. a pointer to an attribute
- * of the value).
- * if an error occurs, it returns -1.
- * if all went ok, returns 0.
- */
-int lht_insert_entry(lht_t* self, const char* key, void* value) {
+int lht_insert_entry(lht_t* self, const void* key, void* value) {
     size_t first_hash, i;
     lht_entry_t* new = malloc(sizeof(lht_entry_t));
     int round = 1;
-    first_hash = i = (size_t)calculate_hash1(key);
+    first_hash = i = (size_t)calculate_hash1(self, key);
     if (!new) {
         fprintf(stderr, "couldn't get memory for the new hash table node!\n");
         return -1;
     }
     /* jumping collisions */
     while (self->raw[i]) {
-        i = rehash(key, first_hash, round);
+        i = rehash(self, key, first_hash, round);
         round++;
     }
 
@@ -156,11 +119,7 @@ int lht_insert_entry(lht_t* self, const char* key, void* value) {
     return 0;
 }
 
-/*
- * removes the entry from the given lht.
- * returns a pointer to the value.
- */
-void* lht_leak_entry(lht_t* self, const char* key) {
+void* lht_remove_entry(lht_t* self, const void* key) {
     void* value;
     ssize_t i = lht_get_index(self, key);
     /* the isn't an entry associated to the given key */
@@ -194,31 +153,17 @@ void* lht_leak_entry(lht_t* self, const char* key) {
     return value;
 }
 
-/*
- * returns the number of entries registered in the lht.
- */
 size_t lht_get_size(lht_t* self) { return self->size; }
 
-/*
- * iterates over the given lht, according to the linking.
- * returns a pointer to the next entry or NULL if it reached the end.
- * if used the BEGIN flag, it'll go to the beggining of the table.
- * if used the KEEP flag, it'll keep going from where it was.
- */
 void* lht_iter(lht_t* self, iter_setting setting) {
-    lht_entry_t* next;
-    if (setting == KEEP)
-        next = self->lht_iterator_current->next;
-    else
-        next = self->first;
+    lht_entry_t* next =
+        (setting == KEEP) ? self->lht_iterator_current->next : self->first;
+
     self->lht_iterator_current = next;
+
     return (next) ? next->value : NULL;
 }
 
-/*
- * pops the last entry of the lht, according to the linking.
- * returns NULL if the lht is empty.
- */
 void* lht_pop_entry(lht_t* self) {
     lht_entry_t* tmp;
     void* corn; /* cus popcorn lol */
