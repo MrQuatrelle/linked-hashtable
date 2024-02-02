@@ -7,7 +7,7 @@
 #define INIT_HASH 16
 
 typedef struct lht_entry {
-    const char* key;
+    const void* key;
     void* value;
     struct lht_entry* next;
     struct lht_entry* prev;
@@ -33,11 +33,14 @@ typedef struct lht {
      * insertion. Why two? Read:
      * https://www.scaler.com/topics/data-structures/double-hashing/
      */
-    size_t (*hash_func1)(const void* obj);
-    size_t (*hash_func2)(const void* obj);
+    size_t (*hash_func1)(const void* key);
+    size_t (*hash_func2)(const void* key);
 } lht_t;
 
-typedef enum { BEGIN, KEEP } iter_setting;
+typedef enum {
+    BEGIN,
+    KEEP
+} iter_setting;
 
 /*
  * Alocates memory for an lht and initializes it.
@@ -57,7 +60,7 @@ void lht_destroy(lht_t* self);
  * It'll return a pointer to it.
  * Else, it'll return NULL.
  */
-void* lht_get_entry(lht_t* self, const void* key);
+void* lht_get(const lht_t* self, const size_t key);
 
 /*
  * Insert a new entry into the lht.
@@ -66,19 +69,19 @@ void* lht_get_entry(lht_t* self, const void* key);
  * If an error occurs, it returns -1.
  * If all went ok, returns 0.
  */
-int lht_insert_entry(lht_t* self, const void* key, void* obj);
+int lht_insert(lht_t* self, const void* key, const void* obj);
 
 /*
  * Removes the entry from the given lht.
  * Returns a pointer to the value.
  */
-void* lht_remove_entry(lht_t* self, const void* key);
+void* lht_remove(lht_t* const self, const void* key);
 
 /*
  * Pops the last entry of the lht, according to the linking.
  * Returns NULL if the lht is empty.
  */
-void* lht_pop_entry(lht_t* self);
+void* lht_pop(lht_t* self);
 
 /*
  * Iterates over the given lht, according to the linking.
@@ -91,6 +94,6 @@ void* lht_iter(lht_t* table, iter_setting setting);
 /*
  * Returns the number of entries registered in the lht.
  */
-size_t lht_get_size(lht_t* self);
+size_t lht_size(const lht_t* self);
 
 #endif /* !LHT_HEADER */
