@@ -1,5 +1,7 @@
 #include "linked-hash-table.h"
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/cdefs.h>
 
 /** DEBUG MACROS **/
@@ -25,6 +27,12 @@
 
 #define LOG(...) LOG_WRAPPER(CYAN "[LOG]: ", __VA_ARGS__)
 
+#define PANIC(...)                                                             \
+    do {                                                                       \
+        LOG_WRAPPER(RED "[PANIC]: ", __VA_ARGS__);                             \
+        exit(1);                                                               \
+    } while (0);
+
 #define OOPS_ERRNO(...)                                                        \
     do {                                                                       \
         char buf[2048];                                                        \
@@ -39,7 +47,7 @@ lht_t* lht_init(void) {
     lht_t* new = (lht_t*)malloc(sizeof(lht_t));
     int i;
     if (!new) {
-        OOPS_ERRNO("failed to allocate memory for the hash table");
+        PANIC("failed to allocate memory for the hash table");
         return NULL;
     }
 
@@ -47,7 +55,7 @@ lht_t* lht_init(void) {
     new->raw = malloc(sizeof(void*) * INIT_HASH);
     if (!new->raw) {
         free(new);
-        OOPS_ERRNO("failed to allocate memory for the hash table");
+        PANIC("failed to allocate memory for the hash table");
         return NULL;
     }
 
@@ -66,8 +74,9 @@ lht_t* lht_init(void) {
 }
 
 void lht_destroy(lht_t* const self) {
-    if (!self)
+    if (!self) {
         return;
+    }
 
     free(self->raw);
     free(self);
@@ -103,8 +112,9 @@ lht_entry_t* lht_find_node(const lht_t* const self, const void* const key) {
 
     /* jumping collisions with multiple hashing */
     while (self->raw[i]) {
-        if (!strcmp(self->raw[i]->key, key))
+        if (!strcmp(self->raw[i]->key, key)) {
             return self->raw[i];
+        }
 
         i = calculate_rehash(self, key, init, round);
         round++;
@@ -172,16 +182,18 @@ void* lht_remove(lht_t* const self, const void* const key) {
     void* value = node->value;
 
     /* if it is not the last */
-    if (node->next)
+    if (node->next) {
         node->next->prev = node->prev;
-    else
+    } else {
         self->last = node->prev;
+    }
 
     /* if it is not the first */
-    if (node->prev)
+    if (node->prev) {
         node->prev->next = node->next;
-    else
+    } else {
         self->first = node->next;
+    }
 
     /* frees the allocated space */
     free(node);
@@ -200,22 +212,14 @@ __always_inline size_t lht_size(const lht_t* self) {
     return self->size;
 }
 
-void* lht_iter(lht_t* const self, iter_setting const setting) {
-    lht_entry_t* next =
-        (setting == KEEP) ? self->lht_iterator_current->next : self->first;
-
-    self->lht_iterator_current = next;
-
-    return (next) ? next->value : NULL;
-}
-
 void* lht_pop(lht_t* self) {
     lht_entry_t* tmp;
     void* corn; /* cus popcorn lol */
 
     /* no entries */
-    if (!self->last)
+    if (!self->last) {
         return NULL;
+    }
 
     /* remove entry and bypass linking */
     self->raw[self->last->i] = NULL;
@@ -231,4 +235,87 @@ void* lht_pop(lht_t* self) {
     }
 
     return corn;
+}
+
+lht_iter_t* lht_iter_init(lht_t* const self, const iter_setting setting) {
+    if (setting != NORM && setting != REV) {
+        PANIC("Unknown lht_iter setting");
+    }
+
+    lht_iter_t it = {
+        .lht = self,
+        .setting = setting,
+        .curr = NULL,
+    };
+
+    lht_iter_t* it_dyn = (lht_iter_t*)malloc(sizeof(lht_iter_t));
+    memcpy(it_dyn, &it, sizeof(it));
+
+    return it_dyn;
+}
+
+void lht_iter_destroy(lht_iter_t* it) {
+    free(it);
+}
+
+lht_entry_t* lht_iter_norm_next(lht_iter_t* self) {
+    if (unlikely(!self->lht->first)) {
+        return NULL;
+    }
+
+    self->curr = (unlikely(!self->curr)) ? self->lht->first : self->curr->next;
+
+    return self->curr;
+}
+
+lht_entry_t* lht_iter_norm_prev(lht_iter_t* self) {
+    if (unlikely(!self->curr)) {
+        return NULL;
+    }
+
+    self->curr = self->curr->prev;
+    return self->curr;
+}
+
+lht_entry_t* lht_iter_rev_next(lht_iter_t* self) {
+    /* lht is empty */
+    if (unlikely(!self->lht->last)) {
+        return NULL;
+    }
+
+    self->curr = (unlikely(!self->curr)) ? self->lht->last : self->curr->prev;
+
+    return self->curr;
+}
+
+lht_entry_t* lht_iter_rev_prev(lht_iter_t* self) {
+    if (unlikely(!self->curr)) {
+        return NULL;
+    }
+
+    self->curr = self->curr->next;
+    return self->curr;
+}
+
+__always_inline void* lht_iter_next(lht_iter_t* self) {
+    return (self->setting == NORM) ? lht_iter_norm_next(self)->value
+                                   : lht_iter_rev_next(self)->value;
+}
+
+__always_inline void* lht_iter_prev(lht_iter_t* self) {
+    return (self->setting == NORM) ? lht_iter_norm_prev(self)->value
+                                   : lht_iter_rev_prev(self)->value;
+}
+
+// TODO: check if this is ok
+void* lht_iter_pop(lht_iter_t* self) {
+    if (unlikely(!self->curr)) {
+        return NULL;
+    }
+
+    lht_entry_t* next = self->curr->next;
+    void* ret = lht_remove(self->lht, self->curr->key);
+    self->curr = next;
+
+    return ret;
 }

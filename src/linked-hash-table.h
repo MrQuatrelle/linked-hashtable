@@ -6,6 +6,9 @@
 
 #define INIT_HASH 16
 
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 typedef struct lht_entry {
     const void* key;
     void* value;
@@ -38,9 +41,15 @@ typedef struct lht {
 } lht_t;
 
 typedef enum {
-    BEGIN,
-    KEEP
+    NORM,
+    REV,
 } iter_setting;
+
+typedef struct lht_iter {
+    lht_t* lht;
+    lht_entry_t* curr;
+    const iter_setting setting;
+} lht_iter_t;
 
 /*
  * Alocates memory for an lht and initializes it.
@@ -78,22 +87,41 @@ int lht_insert(lht_t* self, const void* key, const void* obj);
 void* lht_remove(lht_t* const self, const void* key);
 
 /*
+ * Returns the number of entries registered in the lht.
+ */
+size_t lht_size(const lht_t* self);
+
+/*
  * Pops the last entry of the lht, according to the linking.
  * Returns NULL if the lht is empty.
  */
 void* lht_pop(lht_t* self);
 
 /*
- * Iterates over the given lht, according to the linking.
- * Returns a pointer to the next entry or NULL if it reached the end.
- * If used the BEGIN flag, it'll go to the beggining of the table.
- * If used the KEEP flag, it'll keep going from where it was.
+ * Creates an iterator over the given lht, which iterates according to the
+ * linking in normal order or reversed order (check the iter_setting enum)
+ * table.
+ * Use the lht_iter_next() and lht_iter_prev() functions to push it along.
  */
-void* lht_iter(lht_t* table, iter_setting setting);
+lht_iter_t* lht_iter_init(lht_t* table, iter_setting setting);
 
-/*
- * Returns the number of entries registered in the lht.
+/**
+ * Destroys the dyamic memory used to keep its state.
  */
-size_t lht_size(const lht_t* self);
+void lht_iter_destroy(lht_iter_t* self);
+
+/**
+ * Pushes the iterator to the next element, if it exists, and returns it.
+ * If it doesn't exist, then this function will return NULL and won't push the
+ * iterator.
+ */
+void* lht_iter_next(lht_iter_t* self);
+
+/**
+ * Pushes the iterator to the previous element, if it exists, and returns it.
+ * If it doesn't exist, then this function will return NULL and won't push the
+ * iterator.
+ */
+void* lht_iter_prev(lht_iter_t* self);
 
 #endif /* !LHT_HEADER */
