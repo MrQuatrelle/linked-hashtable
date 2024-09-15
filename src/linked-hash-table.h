@@ -1,9 +1,8 @@
 #ifndef LHT_HEADER
+#define LHT_HEADER
+
 #include "debug.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 
 #define INIT_HASH 16
 

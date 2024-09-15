@@ -1,9 +1,4 @@
 #include "linked-hash-table.h"
-#include "debug.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/cdefs.h>
 
 lht_t* lht_init(size_t (*const hf1)(const void*),
                 size_t (*const hf2)(const void*),
