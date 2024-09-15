@@ -1,4 +1,5 @@
 #ifndef LHT_HEADER
+#include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,20 +25,26 @@ typedef struct lht_entry {
  */
 typedef struct lht {
     lht_entry_t** raw;
+    lht_entry_t* first;
+    lht_entry_t* last;
+    size_t* bitmap;
+
     size_t size;
     size_t capacity;
 
-    lht_entry_t* first;
-    lht_entry_t* last;
-    lht_entry_t* lht_iterator_current;
-
-    /*
+    /**
      * Hash functions provided by the user to calculate the indexes of
      * insertion. Why two? Read:
      * https://www.scaler.com/topics/data-structures/double-hashing/
      */
-    size_t (*hash_func1)(const void* key);
-    size_t (*hash_func2)(const void* key);
+    const size_t (*hash_func1)(const void* key);
+    const size_t (*hash_func2)(const void* key);
+
+    /**
+     * Comparator function, in case it is desired that the linked-list respects
+     * a custom order. If NULL, insertion order is respected.
+     */
+    const size_t (*cmp)(const void* self, const void* other);
 } lht_t;
 
 typedef enum {
@@ -46,17 +53,25 @@ typedef enum {
 } iter_setting;
 
 typedef struct lht_iter {
-    lht_t* lht;
+    lht_t* const lht;
     lht_entry_t* curr;
     const iter_setting setting;
 } lht_iter_t;
 
-/*
- * Alocates memory for an lht and initializes it.
- * Returns a pointer to the generated lht or NULL if there was any error in the
- * process.
+/**
+ * @brief Alocates memory for an lht and initializes it. Returns a pointer to
+ * the generated lht or NULL if there was any error in the process.
+ *
+ * @param hf1 first hash function.
+ * @param hf2 second hash function.
+ * @param cmp comparator function. If NULL, linked-list will be ordered by the
+ * order of insertion
+ * @return pointer to new linked-hashtable
  */
-lht_t* lht_init(void);
+lht_t* lht_init(const size_t (*hf1)(const void*),
+                const size_t (*hf2)(const void*),
+                const size_t (*cmp)(const void*, const void*))
+    __attribute__((nonnull(1, 2)));
 
 /*
  * Frees the memory given to the lht.
@@ -103,12 +118,7 @@ void* lht_pop(lht_t* self);
  * table.
  * Use the lht_iter_next() and lht_iter_prev() functions to push it along.
  */
-lht_iter_t* lht_iter_init(lht_t* table, iter_setting setting);
-
-/**
- * Destroys the dyamic memory used to keep its state.
- */
-void lht_iter_destroy(lht_iter_t* self);
+lht_iter_t lht_iter_init(lht_t* table, iter_setting setting);
 
 /**
  * Pushes the iterator to the next element, if it exists, and returns it.
