@@ -37,14 +37,14 @@ typedef struct lht {
      * insertion. Why two? Read:
      * https://www.scaler.com/topics/data-structures/double-hashing/
      */
-    const size_t (*hash_func1)(const void* key);
-    const size_t (*hash_func2)(const void* key);
+    size_t (*const hash_func1)(const void* key);
+    size_t (*const hash_func2)(const void* key);
 
     /**
      * Comparator function, in case it is desired that the linked-list respects
      * a custom order. If NULL, insertion order is respected.
      */
-    const size_t (*cmp)(const void* self, const void* other);
+    size_t (*const cmp)(const void* self, const void* other);
 } lht_t;
 
 typedef enum {
@@ -68,9 +68,9 @@ typedef struct lht_iter {
  * order of insertion
  * @return pointer to new linked-hashtable
  */
-lht_t* lht_init(const size_t (*hf1)(const void*),
-                const size_t (*hf2)(const void*),
-                const size_t (*cmp)(const void*, const void*))
+lht_t* lht_init(size_t (*const hf1)(const void*),
+                size_t (*const hf2)(const void*),
+                size_t (*const cmp)(const void*, const void*))
     __attribute__((nonnull(1, 2)));
 
 /*
@@ -93,7 +93,7 @@ void* lht_get(const lht_t* self, const size_t key);
  * If an error occurs, it returns -1.
  * If all went ok, returns 0.
  */
-int lht_insert(lht_t* self, const void* key, const void* obj);
+int lht_insert(lht_t* const self, const void* key, const void* obj);
 
 /*
  * Removes the entry from the given lht.

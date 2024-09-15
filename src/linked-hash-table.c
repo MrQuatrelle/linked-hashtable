@@ -1,12 +1,13 @@
 #include "linked-hash-table.h"
 #include "debug.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/cdefs.h>
 
-lht_t* lht_init(const size_t (*hf1)(const void*),
-                const size_t (*hf2)(const void*),
-                const size_t (*cmp)(const void*, const void*)) {
+lht_t* lht_init(size_t (*const hf1)(const void*),
+                size_t (*const hf2)(const void*),
+                size_t (*const cmp)(const void*, const void*)) {
 
     lht_entry_t** raw = malloc(sizeof(void*) * INIT_HASH);
 
@@ -30,14 +31,16 @@ lht_t* lht_init(const size_t (*hf1)(const void*),
     lht_t* new_dyn = malloc(sizeof(lht_t));
 
     if (new_dyn) {
-        goto exit;
+        goto success;
     }
 
-fail_new_dyn:
     free(raw);
 fail_inner:
     OOPS_ERRNO("Failed to alloc memory for the new lht");
-exit:
+    return NULL;
+
+success:
+    memcpy(new_dyn, &new, sizeof(lht_t));
     return new_dyn;
 }
 
@@ -50,19 +53,21 @@ void lht_destroy(lht_t* const self) {
     free(self);
 }
 
-__always_inline __attribute_const__ static size_t
-__calculate_hash1(const lht_t* const self, const void* const key) {
+__always_inline static size_t __calculate_hash1(const lht_t* const self,
+                                                const void* const key) {
     return self->hash_func1(key) % self->capacity;
 }
 
-__always_inline __attribute_const__ static size_t
-__calculate_hash2(const lht_t* const self, const void* const key) {
+__always_inline static size_t __calculate_hash2(const lht_t* const self,
+                                                const void* const key) {
     return self->hash_func2(key) % self->capacity;
 }
 
-__always_inline __attribute_const__ static size_t __calculate_rehash(
-    const lht_t* const self, const void* key, const size_t prev, int round) {
-    return (prev + round * __calculate_hash2(self, key)) % self->capacity;
+__always_inline static size_t __calculate_rehash(const lht_t* const self,
+                                                 const void* key,
+                                                 const size_t prev,
+                                                 int round) {
+    return (prev + (round * __calculate_hash2(self, key))) % self->capacity;
 }
 
 __always_inline void* lht_get(const lht_t* const self, const size_t key) {
@@ -71,7 +76,7 @@ __always_inline void* lht_get(const lht_t* const self, const size_t key) {
                                            : NULL;
 }
 
-lht_entry_t* lht_find_node(const lht_t* const self, const void* const key) {
+lht_entry_t* __lht_find_node(const lht_t* const self, const void* const key) {
     size_t init, i;
     int round = 1;
 
@@ -91,9 +96,8 @@ lht_entry_t* lht_find_node(const lht_t* const self, const void* const key) {
     return NULL;
 }
 
-__always_inline void*
-lht_find(const lht_t* const self, const void* const key, int bla) {
-    const lht_entry_t* node = lht_find_node(self, key);
+__always_inline void* lht_find(const lht_t* const self, const void* const key) {
+    const lht_entry_t* node = __lht_find_node(self, key);
 
     return (node) ? node->value : NULL;
 }
@@ -101,6 +105,66 @@ lht_find(const lht_t* const self, const void* const key, int bla) {
 lht_iter_t lht_iter_init(lht_t* const, const iter_setting);
 lht_entry_t* __lht_iter_next_inner(lht_iter_t* const);
 void __lht_iter_put(lht_iter_t* const, lht_entry_t* const);
+
+int __lht_update_capacity(lht_t* const self, const long new_cap) {
+    lht_entry_t** new_raw = realloc(self->raw, new_cap * sizeof(lht_entry_t*));
+
+    if (new_raw == NULL) {
+        return -1;
+    }
+
+    for (size_t i = self->capacity; i < new_cap; ++i) {
+        new_raw[i] = NULL;
+    }
+
+    /* need to update capacity already for hash functions to work */
+    self->capacity = new_cap;
+
+    lht_iter_t it = lht_iter_init(self, NORM);
+    lht_entry_t *entry, *prev_entry = NULL;
+    int r = 0;
+
+    while ((entry = __lht_iter_next_inner(&it))) {
+        size_t i = __calculate_hash1(self, entry->key);
+
+        while (new_raw[i]) {
+            i = __calculate_rehash(self, entry->key, i, r++);
+        }
+
+        entry->i = i;
+        new_raw[i] = entry;
+
+        if (likely(prev_entry)) {
+            prev_entry->next = entry;
+            entry->prev = prev_entry;
+        } else {
+            entry->prev = NULL;
+        }
+    }
+
+    it.curr->next = NULL;
+
+    return 0;
+}
+
+int __lht_increase_capacity(lht_t* const self) {
+    if (self->size < (self->capacity >> 1)) {
+        return 0;
+    }
+
+    return __lht_update_capacity(self, self->capacity << 1);
+}
+
+int __lht_decrease_capacity(lht_t* const self) {
+    if (self->size > (self->capacity >> 3)) {
+        return -1;
+    }
+    if (self->capacity <= 16) {
+        return 0;
+    }
+
+    return __lht_update_capacity(self, self->capacity >> 1);
+}
 
 int lht_insert(lht_t* const self,
                const void* const key,
@@ -119,6 +183,10 @@ int lht_insert(lht_t* const self,
     while (self->raw[i]) {
         i = __calculate_rehash(self, key, first_hash, round);
         round++;
+    }
+
+    if (__lht_increase_capacity(self) == -1) {
+        OOPS_ERRNO("Failed to increase size of lht");
     }
 
     /* adding info to the lht entry */
@@ -170,7 +238,7 @@ int lht_insert(lht_t* const self,
 }
 
 void* lht_remove(lht_t* const self, const void* const key) {
-    lht_entry_t* node = lht_find_node(self, key);
+    lht_entry_t* node = __lht_find_node(self, key);
 
     if (!node) {
         return NULL;
@@ -202,6 +270,10 @@ void* lht_remove(lht_t* const self, const void* const key) {
         self->last = NULL;
     }
 
+    if (__lht_decrease_capacity(self) == -1) {
+        OOPS_ERRNO("Failed to decrease size of lht");
+    }
+
     return value;
 }
 
@@ -231,6 +303,10 @@ void* lht_pop(lht_t* self) {
         self->last = NULL;
     }
 
+    if (__lht_decrease_capacity(self) == -1) {
+        OOPS_ERRNO("Failed to decrease size of lht");
+    }
+
     return corn;
 }
 
@@ -255,37 +331,60 @@ lht_entry_t* __lht_iter_norm_next(lht_iter_t* const self) {
         return NULL;
     }
 
-    self->curr = (unlikely(!self->curr)) ? self->lht->first : self->curr->next;
+    if (unlikely(!self->curr)) {
+        self->curr = self->lht->first;
+    } else if (likely(self->curr->next)) {
+        self->curr = self->curr->next;
+    } else {
+        /* is last element, let curr stay unchanged */
+        return NULL;
+    }
 
     return self->curr;
 }
 
 lht_entry_t* __lht_iter_norm_prev(lht_iter_t* const self) {
     if (unlikely(!self->curr)) {
+        /* was never initialized */
+        return NULL;
+    } else if (likely(self->curr->prev)) {
+        self->curr = self->curr->prev;
+    } else {
+        /* is first element, let curr stay unchanged */
         return NULL;
     }
 
-    self->curr = self->curr->prev;
     return self->curr;
 }
 
 lht_entry_t* __lht_iter_rev_next(lht_iter_t* const self) {
-    /* lht is empty */
     if (unlikely(!self->lht->last)) {
         return NULL;
     }
 
-    self->curr = (unlikely(!self->curr)) ? self->lht->last : self->curr->prev;
+    if (unlikely(!self->curr)) {
+        self->curr = self->lht->last;
+    } else if (likely(self->curr->prev)) {
+        self->curr = self->curr->prev;
+    } else {
+        /* is last element, let curr stay unchanged */
+        return NULL;
+    }
 
     return self->curr;
 }
 
 lht_entry_t* __lht_iter_rev_prev(lht_iter_t* const self) {
     if (unlikely(!self->curr)) {
+        /* was never initialized */
+        return NULL;
+    } else if (likely(self->curr->next)) {
+        self->curr = self->curr->next;
+    } else {
+        /* is first element, let curr stay unchanged */
         return NULL;
     }
 
-    self->curr = self->curr->next;
     return self->curr;
 }
 
