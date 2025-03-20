@@ -1,0 +1,23 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-Wall",
+      "-Werror",
+      "-Wextra",
+      "-std=c17",
+      "-O0",
+      "-g",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DDEBUG_MACROS",
+      "-c",
+      "-o",
+      "test.o",
+      "test.c"
+    ],
+    "directory": "/home/mrquatrelle/free/linked-hashtable",
+    "file": "/home/mrquatrelle/free/linked-hashtable/test.c",
+    "output": "/home/mrquatrelle/free/linked-hashtable/test.o"
+  }
+]

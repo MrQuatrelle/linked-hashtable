@@ -1,12 +1,14 @@
 #include "linked-hash-table.h"
+#include "debug.h"
+#include <stddef.h>
 
 lht_t* lht_init(size_t (*const hf1)(const void*),
                 size_t (*const hf2)(const void*),
-                size_t (*const cmp)(const void*, const void*)) {
+                int (*const cmp)(const void*, const void*)) {
 
     lht_entry_t** raw = malloc(sizeof(void*) * INIT_HASH);
 
-    if (raw) {
+    if (!raw) {
         goto fail_inner;
     }
 
@@ -31,7 +33,7 @@ lht_t* lht_init(size_t (*const hf1)(const void*),
 
     free(raw);
 fail_inner:
-    OOPS_ERRNO("Failed to alloc memory for the new lht");
+    PANIC("Failed to alloc memory for the new lht");
     return NULL;
 
 success:
@@ -66,9 +68,9 @@ __always_inline static size_t __calculate_rehash(const lht_t* const self,
 }
 
 __always_inline void* lht_get(const lht_t* const self, const size_t key) {
-    return (key <= self->size && key >= 0) ? NULL
-           : (self->raw[key])              ? self->raw[key]->value
-                                           : NULL;
+    return (key <= self->size) ? NULL
+           : (self->raw[key])  ? self->raw[key]->value
+                               : NULL;
 }
 
 lht_entry_t* __lht_find_node(const lht_t* const self, const void* const key) {
@@ -101,7 +103,7 @@ lht_iter_t lht_iter_init(lht_t* const, const iter_setting);
 lht_entry_t* __lht_iter_next_inner(lht_iter_t* const);
 void __lht_iter_put(lht_iter_t* const, lht_entry_t* const);
 
-int __lht_update_capacity(lht_t* const self, const long new_cap) {
+int __lht_update_capacity(lht_t* const self, const size_t new_cap) {
     lht_entry_t** new_raw = realloc(self->raw, new_cap * sizeof(lht_entry_t*));
 
     if (new_raw == NULL) {
@@ -166,7 +168,7 @@ int lht_insert(lht_t* const self,
                const void* const value) {
     lht_entry_t* new = malloc(sizeof(lht_entry_t));
     if (!new) {
-        OOPS_ERRNO("failed to allocate memory for new element");
+        PANIC("failed to allocate memory for new element");
         return -1;
     }
 
@@ -181,7 +183,7 @@ int lht_insert(lht_t* const self,
     }
 
     if (__lht_increase_capacity(self) == -1) {
-        OOPS_ERRNO("Failed to increase size of lht");
+        PANIC("Failed to increase size of lht");
     }
 
     /* adding info to the lht entry */
@@ -266,7 +268,7 @@ void* lht_remove(lht_t* const self, const void* const key) {
     }
 
     if (__lht_decrease_capacity(self) == -1) {
-        OOPS_ERRNO("Failed to decrease size of lht");
+        PANIC("Failed to decrease size of lht");
     }
 
     return value;
@@ -299,7 +301,7 @@ void* lht_pop(lht_t* self) {
     }
 
     if (__lht_decrease_capacity(self) == -1) {
-        OOPS_ERRNO("Failed to decrease size of lht");
+        PANIC("Failed to decrease size of lht");
     }
 
     return corn;

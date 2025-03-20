@@ -1,14 +1,22 @@
 #ifndef LHT_HEADER
 #define LHT_HEADER
 
-#include "debug.h"
+#include <bits/types.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/cdefs.h>
 
 #define INIT_HASH 16
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+/**
+ * @typedef struct lht_entry
+ * @brief keeps the information for an entry in the linked-hashtable
+ *
+ */
 typedef struct lht_entry {
     const void* key;
     void* value;
@@ -18,15 +26,15 @@ typedef struct lht_entry {
 } lht_entry_t;
 
 /**
- * @typedef lht_t
- * @brief Struct that represents the linked-hashtable.
+ * @typedef struct lht
+ * @brief keeps the information for the linked-hashtable
  *
  */
-typedef struct lht {
+typedef struct {
     lht_entry_t** raw;
     lht_entry_t* first;
     lht_entry_t* last;
-    size_t* bitmap;
+    char* bitmap;
 
     size_t size;
     size_t capacity;
@@ -43,7 +51,7 @@ typedef struct lht {
      * Comparator function, in case it is desired that the linked-list respects
      * a custom order. If NULL, insertion order is respected.
      */
-    size_t (*const cmp)(const void* self, const void* other);
+    int (*const cmp)(const void* self, const void* other);
 } lht_t;
 
 typedef enum {
@@ -69,10 +77,10 @@ typedef struct lht_iter {
  */
 lht_t* lht_init(size_t (*const hf1)(const void*),
                 size_t (*const hf2)(const void*),
-                size_t (*const cmp)(const void*, const void*))
+                int (*const cmp)(const void*, const void*))
     __attribute__((nonnull(1, 2)));
 
-/*
+/**
  * Frees the memory given to the lht.
  * Every entry MUST be popped out before to avoid memory leaks.
  */
@@ -85,7 +93,7 @@ void lht_destroy(lht_t* self);
  */
 void* lht_get(const lht_t* self, const size_t key);
 
-/*
+/**
  * Insert a new entry into the lht.
  * The key must have the same lifetime as the value (e.g. a pointer to an
  * attribute of the value).
@@ -94,24 +102,24 @@ void* lht_get(const lht_t* self, const size_t key);
  */
 int lht_insert(lht_t* const self, const void* key, const void* obj);
 
-/*
+/**
  * Removes the entry from the given lht.
  * Returns a pointer to the value.
  */
 void* lht_remove(lht_t* const self, const void* key);
 
-/*
+/**
  * Returns the number of entries registered in the lht.
  */
 size_t lht_size(const lht_t* self);
 
-/*
+/**
  * Pops the last entry of the lht, according to the linking.
  * Returns NULL if the lht is empty.
  */
 void* lht_pop(lht_t* self);
 
-/*
+/**
  * Creates an iterator over the given lht, which iterates according to the
  * linking in normal order or reversed order (check the iter_setting enum)
  * table.

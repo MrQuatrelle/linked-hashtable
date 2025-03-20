@@ -1,6 +1,7 @@
 CC = gcc
-CFLAGS = -Wall -Werror -pedantic -std=c17 -O0
+CFLAGS = -Wall -Werror -Wextra -std=c17 -O0
 CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
+CFLAGS += -DDEBUG_MACROS
 
 SRCDIR = ./src
 LIBSRC = $(wildcard $(SRCDIR)/*.c)
